@@ -1,0 +1,156 @@
+# Peer Assignment 1
+Heather Grebe
+
+# Load Relevant Packages
+
+```{r loadpackages, warning=FALSE, message=FALSE}
+library(magrittr)
+library(tidyr)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(xtable)
+```
+
+# Load and Preprocess Data
+
+```{r unzipandload}
+unzip("./RepData_PeerAssessment1/activity.zip", exdir = "./RepData_PeerAssessment1")
+filePath <- "./RepData_PeerAssessment1/activity.csv"
+activity <- read.csv(filePath)
+```
+
+```{r factortodate}
+activity$date <- as.Date(activity$date)
+tbl_df(activity)
+```
+
+# What is the mean total number of steps taken per day?
+
+Below is a representation of the total number of steps taken each day.
+```{r sumperday}
+tot <- activity %>% select(steps, date) %>% 
+        group_by(date) %>% 
+        summarize(total = sum(steps, na.rm = TRUE))
+
+g <- ggplot(as.data.frame(tot), aes(date, total)) + geom_histogram(stat = "identity")
+g + ggtitle("Total Steps per Day") + xlab("Date") + ylab("Total Steps") 
+```
+
+From these counts we can compute the mean and median number of steps taken each day.
+```{r meanandmedperday}
+activity %>% select(steps, date) %>% 
+        group_by(date) %>% 
+        summarize(total = sum(steps, na.rm = TRUE), 
+                  mean = mean(steps, na.rm = TRUE),
+                  median = median(steps, na.rm = TRUE))
+```
+
+# What is the average daily activity pattern?
+
+Below is a time series plot showing the average number of steps during a given 5-minute interval averaged across all days.
+```{r timeseries}
+dact <- activity %>% group_by(interval) %>%
+        summarize(aveact = mean(steps, na.rm = TRUE))
+d <- ggplot(as.data.frame(dact), aes(interval, aveact))
+d + geom_line() + ggtitle("Average Steps per Interval") + xlab("5-Minute Interval") + ylab("Average Steps Across All Days")
+```
+
+
+```{r maxsteps}
+maxstep <- dact %>% arrange(desc(aveact))
+maxint <- maxstep[[1]][1]
+maxval <- round(maxstep[[2]][1],0)
+```
+From this time series plot we can easily see that the interval with the maximum number of steps on average is the interval beginning at `r maxint` minutes. This interval contains, on average, `r maxval` steps. 
+
+# Imputing missing values
+
+```{r nacount}
+totna <- sum(is.na(activity$steps))
+perna <- round(totna/count(activity)*100, 1)
+```
+
+This dataset contains `r totna` missing values which account for approximately `r perna`% of the data.
+
+Imputation is a common method for dealing with these NA's in a dataset. There are many imputation strategies but for this dataset I will be using the simple method of using the mean for the 5-minute interval since some days do not have a mean and most days have a median of 0 given the large number of 0 step entries. 
+
+```{r impute}
+newna <- activity %>% select(steps, date, interval) %>%
+        group_by(interval) %>%
+        mutate(aveint = mean(steps, na.rm = TRUE)) %>%
+        filter(is.na(steps)) %>%
+        mutate(steps = aveint)
+newnotna <- activity %>% select(steps, date, interval) %>%
+        group_by(interval) %>%
+        mutate(aveint = mean(steps, na.rm = TRUE)) %>%
+        filter(!is.na(steps))
+finalnew <- rbind(newna, newnotna) %>% select(steps, date, interval) %>%
+        group_by(date)
+```
+
+From this new dataset we can again look at the total number of steps each day and the mean and median of those days respectively.
+```{r sumperdaynew}
+totnew <- finalnew %>% select(steps, date) %>% 
+        group_by(date) %>% 
+        summarize(total = sum(steps, na.rm = TRUE))
+
+g <- ggplot(as.data.frame(totnew), aes(date, total)) + geom_histogram(stat = "identity")
+g + ggtitle("Total Steps per Day Without NA's") + xlab("Date") + ylab("Total Steps") 
+```
+
+```{r meanandmedperdaynew}
+finalnew %>% select(steps, date) %>% 
+        group_by(date) %>% 
+        summarize(total = sum(steps, na.rm = TRUE), 
+                  mean = mean(steps, na.rm = TRUE),
+                  median = median(steps, na.rm = TRUE))
+```
+
+Using this method of imputation, we being to see median values emerge that are now equal to zero. This is due to values being put in place for each interval of days that were previously populated only with NA's. These medians are not representative of the actual data and suggest that perhaps a different method of impuation would be more appropriate. This impuation also has the effect of increasing the total daily number of steps on any day that previously has missing values populated. 
+
+# Are there differences in activity patterns between weekdays and weekends?
+
+First we must differentiate between weekdays and weekends within the dataset by creating a new factor variable. Then it is necessary to find the average number of steps per interval across both weekdays and weekend days.  
+```{r dayorend}
+finalnewday <- finalnew %>% select(date, steps, interval) %>%
+        mutate(weekday = weekdays(date)) %>%
+        filter(!(weekday %in% c("Saturday", "Sunday"))) %>%
+        mutate(endorday = "weekday")
+
+finalnewend <- finalnew %>% select(date, steps, interval) %>%
+        mutate(weekday = weekdays(date)) %>%
+        filter(weekday %in% c("Saturday", "Sunday")) %>%
+        mutate(endorday = "weekend")
+
+dayorend <- rbind(finalnewday, finalnewend) %>% 
+        select(steps, date, interval, endorday) %>%
+        group_by(interval, endorday) %>%
+        summarize(aveact = mean(steps))
+```
+
+Finally, with this information at hand we can create a time series plot to visualize the difference in the average number of steps in a particular interval segmented by weekdays and weekend days.
+```{r dayorendhist}
+doe <- ggplot(as.data.frame(dayorend), aes(interval, aveact))
+doe + geom_line() + facet_grid(endorday~.) + ggtitle("Average Steps per Interval") + 
+        xlab("5-Minute Interval") + ylab("Average Steps Across Selected Days")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
